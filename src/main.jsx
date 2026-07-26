@@ -268,7 +268,7 @@ function CareTracker({ care, setCare }) {
           <input
             type="range"
             min="0"
-            max="4"
+            max="8"
             step="0.25"
             value={care.waterLiters}
             onChange={(event) => update("waterLiters", clampNumber(event.target.value, 0, 8))}
@@ -552,7 +552,7 @@ function ProgressPanel({ studyMinutes, logHistory }) {
   );
 }
 
-function Journal({ journal, setJournal, onSubmit }) {
+function Journal({ journal, setJournal, onSaveDraft }) {
   function updateField(key, value) {
     setJournal((current) => ({ ...current, [key]: value }));
   }
@@ -576,16 +576,25 @@ function Journal({ journal, setJournal, onSubmit }) {
         <textarea value={journal.carryForward} onChange={(event) => updateField("carryForward", event.target.value)} />
       </label>
       <div className="actions">
-        <button
-          className="ghost-button"
-          onClick={() => localStorage.setItem(`${STORAGE_PREFIX}_journal_draft`, JSON.stringify(journal))}
-        >
+        <button className="ghost-button" onClick={onSaveDraft}>
           Save Draft
         </button>
-        <button className="primary-button" onClick={onSubmit}>
-          Submit Day
-        </button>
       </div>
+    </section>
+  );
+}
+
+function SaveBar({ onSubmit, isSubmitting }) {
+  return (
+    <section className="save-bar">
+      <div className="save-bar-copy">
+        <strong>Finish today</strong>
+        <span>Saves care, study minutes, checkpoints, and reflection together.</span>
+      </div>
+      <button className="primary-button" onClick={onSubmit} disabled={isSubmitting}>
+        <UploadCloud size={17} />
+        {isSubmitting ? "Submitting..." : "Submit Full Day"}
+      </button>
     </section>
   );
 }
@@ -659,6 +668,7 @@ function StudentApp() {
   const [logHistory, setLogHistory] = React.useState([]);
   const [checkpoints, setCheckpoints] = React.useState([]);
   const [journal, setJournal] = React.useState(emptyJournal);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [toast, showToast] = useToast();
   const todayExam = getTodayExam();
   const nextExam = getNextExam();
@@ -740,7 +750,22 @@ function StudentApp() {
     loadToday();
   }, [client]);
 
+  function saveDraft() {
+    localStorage.setItem(`${STORAGE_PREFIX}_journal_draft`, JSON.stringify(journal));
+    showToast("Reflection draft saved.");
+  }
+
   async function submitDay() {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await saveDay();
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function saveDay() {
     const plan = getDayPlan(todayExam, nextExam);
     const mealsCount = [care.morningFoodAte, care.afternoonFoodAte, care.eveningFoodAte].filter(Boolean).length;
     const payload = {
@@ -818,8 +843,9 @@ function StudentApp() {
           <ProgressPanel studyMinutes={studyMinutes} logHistory={logHistory} />
         </div>
         <TipPanel />
-        <Journal journal={journal} setJournal={setJournal} onSubmit={submitDay} />
+        <Journal journal={journal} setJournal={setJournal} onSaveDraft={saveDraft} />
         <FloatingCoach care={care} studyMinutes={studyMinutes} todayExam={todayExam} />
+        <SaveBar onSubmit={submitDay} isSubmitting={isSubmitting} />
         <Toast toast={toast} />
       </AppShell>
     </React.StrictMode>
