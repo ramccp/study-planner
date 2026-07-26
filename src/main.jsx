@@ -16,7 +16,7 @@ import {
   UploadCloud,
   Utensils
 } from "lucide-react";
-import { DAY_NAMES, EXAMS, SUBJECT_PROGRESS, TIMETABLE, TIPS } from "./data";
+import { DAY_NAMES, EXAMS, TIMETABLE, TIPS } from "./data";
 import { makeSupabaseClient } from "./supabaseClient";
 import { formatDate, getDaysUntil, getTodayIndex, todayKey } from "./utils";
 import "./styles.css";
@@ -43,11 +43,11 @@ const defaultStudyMinutes = {
   study_morning_minutes: 0
 };
 const subjectFields = [
-  { key: "study_chem", label: "Chemistry" },
-  { key: "study_eng", label: "English" },
-  { key: "study_calc", label: "Calculus" },
-  { key: "study_be", label: "Basic Engineering" },
-  { key: "study_py", label: "Python" }
+  { key: "study_chem", label: "Chemistry", color: "#ef6461", targetMinutes: 600 },
+  { key: "study_eng", label: "English", color: "#f4b942", targetMinutes: 600 },
+  { key: "study_calc", label: "Calculus", color: "#39a0ed", targetMinutes: 600 },
+  { key: "study_be", label: "Basic Engineering", color: "#42c79b", targetMinutes: 600 },
+  { key: "study_py", label: "Python", color: "#9b7ede", targetMinutes: 600 }
 ];
 const loopReminders = [
   { title: "Drink water", detail: "Small sips through the day" },
@@ -66,6 +66,27 @@ function toSqlTime(value) {
 function clampNumber(value, min, max) {
   const next = Number(value || 0);
   return Math.min(max, Math.max(min, Number.isFinite(next) ? next : min));
+}
+
+function minutesFromLog(log, key) {
+  return Number(log?.[key] || 0);
+}
+
+function getProgressRows(studyMinutes, logHistory) {
+  const today = todayKey();
+  const historyWithoutToday = logHistory.filter((log) => log.date !== today);
+
+  return subjectFields.map((subject) => {
+    const historyMinutes = historyWithoutToday.reduce((sum, log) => sum + minutesFromLog(log, subject.key), 0);
+    const totalMinutes = historyMinutes + minutesFromLog(studyMinutes, subject.key);
+    const pct = Math.min(100, Math.floor((totalMinutes / subject.targetMinutes) * 100));
+
+    return {
+      ...subject,
+      pct,
+      totalMinutes
+    };
+  });
 }
 
 function useToast() {
@@ -268,7 +289,7 @@ function CareTracker({ care, setCare }) {
           </div>
         </div>
 
-        <div className="sleep-card">
+        <div className="sleep-card" id="sleep-check">
           <label>
             <span>Actual wake-up time</span>
             <input type="time" value={care.wakeupTime} onChange={(event) => update("wakeupTime", event.target.value)} />
@@ -505,21 +526,25 @@ function Checkpoints({ checkpoints, setCheckpoints }) {
   );
 }
 
-function ProgressPanel() {
+function ProgressPanel({ studyMinutes, logHistory }) {
+  const progressRows = getProgressRows(studyMinutes, logHistory);
+
   return (
     <section className="panel">
       <div className="panel-title">
         <BarChart3 size={18} />
-        Subject Progress
+        Logged Study Progress
       </div>
+      <p className="progress-note">Based only on study minutes she has logged. Target: 600 minutes per subject.</p>
       <div className="progress-list">
-        {Object.entries(SUBJECT_PROGRESS).map(([subject, data]) => (
-          <div className="progress-row" key={subject}>
-            <span>{subject}</span>
+        {progressRows.map((data) => (
+          <div className="progress-row" key={data.key}>
+            <span>{data.label}</span>
             <div className="progress-track">
               <div className="progress-fill" style={{ width: `${data.pct}%`, backgroundColor: data.color }} />
             </div>
             <strong>{data.pct}%</strong>
+            <em>{data.totalMinutes} / {data.targetMinutes} min</em>
           </div>
         ))}
       </div>
@@ -570,36 +595,36 @@ function getFloatingReminder(care, studyMinutes, todayExam) {
   const studied = Object.values(studyMinutes).reduce((sum, value) => sum + Number(value || 0), 0);
 
   if (hour < 6) {
-    return { type: "Sleep", title: "Sleep time", message: "Rest matters more than one more tired page.", href: "#care-panel", cta: "Mark sleep" };
+    return { type: "Sleep", title: "Sleep time", message: "Rest matters more than one more tired page.", targetId: "sleep-check", cta: "Mark sleep" };
   }
   if (hour < 8) {
-    return { type: "Wake", title: "Start gently", message: "Log wake-up, drink water, then breakfast.", href: "#care-panel", cta: "Open care" };
+    return { type: "Wake", title: "Start gently", message: "Log wake-up, drink water, then breakfast.", targetId: "care-panel", cta: "Open care" };
   }
   if (hour < 10 && !care.morningFoodAte) {
-    return { type: "Eat", title: "Breakfast first", message: "Mark morning food before deep study.", href: "#care-panel", cta: "Log breakfast" };
+    return { type: "Eat", title: "Breakfast first", message: "Mark morning food before deep study.", targetId: "care-panel", cta: "Log breakfast" };
   }
   if (hour < 12) {
     return {
       type: "Study",
       title: todayExam ? "Exam morning focus" : "Morning study block",
       message: todayExam ? `Add minutes for ${todayExam.subject}.` : "Add the study minutes right after the session.",
-      href: "#study-panel",
+      targetId: "study-panel",
       cta: "Add study"
     };
   }
   if (hour < 14 && !care.afternoonFoodAte) {
-    return { type: "Eat", title: "Lunch check", message: "A proper lunch protects the evening study block.", href: "#care-panel", cta: "Log lunch" };
+    return { type: "Eat", title: "Lunch check", message: "A proper lunch protects the evening study block.", targetId: "care-panel", cta: "Log lunch" };
   }
   if (hour < 17 && studied < 60) {
-    return { type: "Study", title: "Study window", message: "Pick one subject and add minutes when done.", href: "#study-panel", cta: "Add minutes" };
+    return { type: "Study", title: "Study window", message: "Pick one subject and add minutes when done.", targetId: "study-panel", cta: "Add minutes" };
   }
   if (hour < 19 && care.waterLiters < 2) {
-    return { type: "Water", title: "Hydration catch-up", message: "Add water now so the night feels easier.", href: "#care-panel", cta: "Add water" };
+    return { type: "Water", title: "Hydration catch-up", message: "Add water now so the night feels easier.", targetId: "care-panel", cta: "Add water" };
   }
   if (hour < 21 && !care.eveningFoodAte) {
-    return { type: "Eat", title: "Evening food", message: "Log snack or dinner before the final review.", href: "#care-panel", cta: "Log evening" };
+    return { type: "Eat", title: "Evening food", message: "Log snack or dinner before the final review.", targetId: "care-panel", cta: "Log evening" };
   }
-  return { type: "Sleep", title: "Wind down", message: "Stop heavy topics. Pack for tomorrow and sleep.", href: "#care-panel", cta: "Sleep check" };
+  return { type: "Sleep", title: "Wind down", message: "Stop heavy topics. Pack for tomorrow and sleep.", targetId: "sleep-check", cta: "Sleep check" };
 }
 
 function FloatingCoach({ care, studyMinutes, todayExam }) {
@@ -612,12 +637,16 @@ function FloatingCoach({ care, studyMinutes, todayExam }) {
 
   const reminder = getFloatingReminder(care, studyMinutes, todayExam);
 
+  function goToTarget() {
+    document.getElementById(reminder.targetId)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
   return (
     <aside className="floating-coach" aria-live="polite">
       <span className="coach-type">{reminder.type}</span>
       <strong>{reminder.title}</strong>
       <p>{reminder.message}</p>
-      <a href={reminder.href}>{reminder.cta}</a>
+      <button onClick={goToTarget}>{reminder.cta}</button>
     </aside>
   );
 }
@@ -627,6 +656,7 @@ function StudentApp() {
   const [dayIndex, setDayIndex] = React.useState(getTodayIndex);
   const [care, setCare] = React.useState(defaultCare);
   const [studyMinutes, setStudyMinutes] = React.useState(defaultStudyMinutes);
+  const [logHistory, setLogHistory] = React.useState([]);
   const [checkpoints, setCheckpoints] = React.useState([]);
   const [journal, setJournal] = React.useState(emptyJournal);
   const [toast, showToast] = useToast();
@@ -661,10 +691,19 @@ function StudentApp() {
     async function loadToday() {
       if (!client) return;
 
-      const [{ data: log }, { data: savedCheckpoints }] = await Promise.all([
+      const [{ data: log }, { data: savedCheckpoints }, { data: savedLogs }] = await Promise.all([
         client.from("daily_logs").select("*").eq("date", todayKey()).maybeSingle(),
-        client.from("checkpoints").select("*").eq("date", todayKey()).order("created_at", { ascending: true })
+        client.from("checkpoints").select("*").eq("date", todayKey()).order("created_at", { ascending: true }),
+        client
+          .from("daily_logs")
+          .select("date, study_chem, study_eng, study_calc, study_be, study_py")
+          .order("date", { ascending: false })
+          .limit(90)
       ]);
+
+      if (savedLogs) {
+        setLogHistory(savedLogs);
+      }
 
       if (log) {
         setJournal({
@@ -754,6 +793,7 @@ function StudentApp() {
     }
 
     localStorage.setItem(`${STORAGE_PREFIX}_journal_${todayKey()}`, JSON.stringify(payload));
+    setLogHistory((current) => [payload, ...current.filter((log) => log.date !== todayKey())]);
     localStorage.removeItem(`${STORAGE_PREFIX}_journal_draft`);
     showToast(client ? "Day submitted and synced." : "Day saved locally.");
   }
@@ -775,7 +815,7 @@ function StudentApp() {
         <Timetable dayIndex={dayIndex} setDayIndex={setDayIndex} />
         <div className="dashboard-grid">
           <Checkpoints checkpoints={checkpoints} setCheckpoints={setCheckpoints} />
-          <ProgressPanel />
+          <ProgressPanel studyMinutes={studyMinutes} logHistory={logHistory} />
         </div>
         <TipPanel />
         <Journal journal={journal} setJournal={setJournal} onSubmit={submitDay} />

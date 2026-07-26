@@ -560,8 +560,10 @@ label {
 }
 
 .morning-study {
+  display: block;
   margin-top: 0;
   margin-bottom: 14px;
+  padding: 12px;
 }
 
 .morning-study.exam {
@@ -571,17 +573,19 @@ label {
 
 .study-input-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: 1fr;
+  gap: 10px;
 }
 
 .minute-stepper {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   align-items: stretch;
-  gap: 12px;
-  min-height: 138px;
-  padding: 18px;
+  gap: 10px;
+  min-height: 0;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: rgba(255, 255, 255, 0.48);
@@ -607,22 +611,29 @@ label {
   color: var(--muted);
   font-size: 12px;
   font-weight: 900;
+  overflow-wrap: anywhere;
 }
 
 .minute-stepper strong {
-  font-size: 32px;
+  font-size: 24px;
   font-variant-numeric: tabular-nums;
   line-height: 1.05;
 }
 
 .stepper-controls {
   display: grid;
-  grid-template-columns: minmax(64px, 0.8fr) minmax(86px, 1fr) minmax(64px, 0.8fr);
-  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.stepper-controls > * {
+  min-width: 0;
 }
 
 .stepper-controls button {
-  min-height: 44px;
+  min-height: 38px;
+  padding: 0 6px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--sun);
@@ -633,8 +644,8 @@ label {
 }
 
 .stepper-controls input {
-  min-height: 44px;
-  padding: 0 8px;
+  min-height: 38px;
+  padding: 0 6px;
   text-align: center;
 }
 
@@ -881,12 +892,25 @@ label {
   gap: 10px;
 }
 
+.progress-note {
+  margin: -4px 0 14px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .progress-row {
   display: grid;
-  grid-template-columns: minmax(130px, 0.4fr) minmax(140px, 1fr) 42px;
+  grid-template-columns: minmax(150px, 0.46fr) minmax(140px, 1fr) 46px 112px;
   align-items: center;
   gap: 10px;
   font-size: 12px;
+}
+
+.progress-row em {
+  color: var(--muted);
+  font-style: normal;
+  font-weight: 800;
+  text-align: right;
 }
 
 .progress-track {
@@ -962,18 +986,19 @@ label {
   font-size: 13px;
 }
 
-.floating-coach a {
+.floating-coach button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-height: 36px;
   padding: 0 12px;
+  border: 0;
   border-radius: 6px;
   background: var(--green);
   color: white;
+  cursor: pointer;
   font-size: 13px;
   font-weight: 900;
-  text-decoration: none;
 }
 
 @media (max-width: 920px) {
