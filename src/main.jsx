@@ -6,7 +6,6 @@ import {
   CalendarDays,
   Check,
   Clock,
-  Database,
   Droplets,
   Moon,
   Plus,
@@ -18,7 +17,7 @@ import {
   Utensils
 } from "lucide-react";
 import { DAY_NAMES, EXAMS, SUBJECT_PROGRESS, TIMETABLE, TIPS } from "./data";
-import { envSupabaseAnonKey, envSupabaseUrl, makeSupabaseClient } from "./supabaseClient";
+import { makeSupabaseClient } from "./supabaseClient";
 import { formatDate, getDaysUntil, getTodayIndex, todayKey } from "./utils";
 import "./styles.css";
 
@@ -152,50 +151,6 @@ function ReminderLoop() {
           </article>
         ))}
       </div>
-    </section>
-  );
-}
-
-function ConnectionPanel({ client, setClient, showToast }) {
-  const [url, setUrl] = React.useState(envSupabaseUrl);
-  const [key, setKey] = React.useState(envSupabaseAnonKey);
-  const [testing, setTesting] = React.useState(false);
-
-  async function connect() {
-    const nextClient = makeSupabaseClient(url.trim(), key.trim());
-    if (!nextClient) {
-      showToast("Add the Supabase URL and anon key first.");
-      return;
-    }
-
-    setTesting(true);
-    const { error } = await nextClient.from("daily_logs").select("date", { head: true, count: "exact" });
-    setTesting(false);
-
-    if (error) {
-      showToast(`Supabase connection failed: ${error.message}`);
-      return;
-    }
-
-    setClient(nextClient);
-    showToast("Connected to Supabase.");
-  }
-
-  return (
-    <section className="sync-strip">
-      <Database size={18} />
-      {client ? (
-        <span>Supabase sync is on.</span>
-      ) : (
-        <>
-          <span>Local mode. Add Supabase keys to sync.</span>
-          <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="Supabase URL" />
-          <input value={key} onChange={(event) => setKey(event.target.value)} placeholder="Anon key" />
-          <button className="primary-button compact" onClick={connect} disabled={testing}>
-            {testing ? "Checking" : "Connect"}
-          </button>
-        </>
-      )}
     </section>
   );
 }
@@ -668,7 +623,7 @@ function FloatingCoach({ care, studyMinutes, todayExam }) {
 }
 
 function StudentApp() {
-  const [client, setClient] = React.useState(() => makeSupabaseClient());
+  const [client] = React.useState(() => makeSupabaseClient());
   const [dayIndex, setDayIndex] = React.useState(getTodayIndex);
   const [care, setCare] = React.useState(defaultCare);
   const [studyMinutes, setStudyMinutes] = React.useState(defaultStudyMinutes);
@@ -806,7 +761,6 @@ function StudentApp() {
   return (
     <React.StrictMode>
       <AppShell>
-        <ConnectionPanel client={client} setClient={setClient} showToast={showToast} />
         <ReminderLoop />
         <TodayPlan todayExam={todayExam} nextExam={nextExam} />
         <section className="countdown-grid">
