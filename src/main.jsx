@@ -11,10 +11,12 @@ import {
   Plus,
   Salad,
   Sparkles,
+  Sun,
   Sunrise,
   Trash2,
   UploadCloud,
-  Utensils
+  Utensils,
+  X
 } from "lucide-react";
 import { DAY_NAMES, EXAMS, TIMETABLE, TIPS } from "./data";
 import { makeSupabaseClient } from "./supabaseClient";
@@ -94,7 +96,7 @@ function useToast() {
 
   const showToast = React.useCallback((message) => {
     setToast({ message, visible: true });
-    window.setTimeout(() => setToast({ message: "", visible: false }), 2600);
+    window.setTimeout(() => setToast({ message: "", visible: false }), 4200);
   }, []);
 
   return [toast, showToast];
@@ -141,37 +143,114 @@ function getDayPlan(todayExam, nextExam) {
   };
 }
 
-function AppShell({ children }) {
+function ThemeToggle() {
+  const [theme, setTheme] = React.useState(() => document.documentElement.dataset.theme || "light");
+
+  function toggle() {
+    const next = theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    localStorage.setItem(`${STORAGE_PREFIX}_theme`, next);
+    setTheme(next);
+  }
+
+  return (
+    <button
+      className="theme-toggle"
+      onClick={toggle}
+      aria-label={theme === "dark" ? "Switch to day mode" : "Switch to night mode"}
+      title={theme === "dark" ? "Switch to day mode" : "Switch to night mode"}
+    >
+      {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+    </button>
+  );
+}
+
+// The nearest exam, sized like it matters. The rule under it fills as the day approaches.
+function HeroCountdown({ exam }) {
+  const [days, setDays] = React.useState(() => getDaysUntil(exam.date));
+
+  React.useEffect(() => {
+    const interval = window.setInterval(() => setDays(getDaysUntil(exam.date)), 60000);
+    return () => window.clearInterval(interval);
+  }, [exam.date]);
+
+  const urgency = Math.min(100, Math.max(4, Math.round((1 - Math.min(days, 30) / 30) * 100)));
+
+  return (
+    <div className="hero-countdown" style={{ "--accent": exam.color }}>
+      <div className="countdown-figure">
+        <strong>{days}</strong>
+        <span>{days === 1 ? "day" : "days"}</span>
+      </div>
+      <div className="countdown-meta">
+        <span className="countdown-subject">{exam.subject}</span>
+        <p className="countdown-when">
+          {formatDate(exam.date)} · {exam.time} · {exam.slot}
+        </p>
+        <div className="urgency-rule">
+          <div className="urgency-fill" style={{ width: `${urgency}%` }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AppShell({ children, nextExam }) {
   return (
     <main className="app-shell">
       <header className="hero">
-        <div className="hero-copy">
-          <p className="eyebrow">CAT1 prep companion</p>
-          <h1>Study, eat, hydrate, repeat.</h1>
-          <p>{new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
+        <div className="hero-top">
+          <div className="hero-copy">
+            <p className="eyebrow">CAT1 prep companion</p>
+            <h1>Study, eat, hydrate, repeat.</h1>
+            <p className="hero-date">
+              {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+            </p>
+          </div>
+          <ThemeToggle />
         </div>
-        <div className="hero-mark">
-          <Sparkles size={26} />
-        </div>
+        {nextExam && <HeroCountdown exam={nextExam} />}
       </header>
       {children}
     </main>
   );
 }
 
-function ReminderLoop() {
-  const items = [...loopReminders, ...loopReminders];
+// Everything logged today, readable in one pass before you scroll.
+function GlanceStrip({ care, studyMinutes, checkpoints }) {
+  const totalMinutes = Object.values(studyMinutes).reduce((sum, value) => sum + Number(value || 0), 0);
+  const mealsCount = [care.morningFoodAte, care.afternoonFoodAte, care.eveningFoodAte].filter(Boolean).length;
+  const doneCount = checkpoints.filter((checkpoint) => checkpoint.done).length;
+
+  const items = [
+    { label: "Studied", value: `${totalMinutes}m`, met: totalMinutes >= 120 },
+    { label: "Water", value: `${Number(care.waterLiters).toFixed(1)}L`, met: care.waterLiters >= 2.5 },
+    { label: "Meals", value: `${mealsCount}/3`, met: mealsCount === 3 },
+    { label: "Sleep", value: care.sleep ? "Logged" : "—", met: care.sleep },
+    { label: "Checkpoints", value: `${doneCount}/${checkpoints.length}`, met: checkpoints.length > 0 && doneCount === checkpoints.length }
+  ];
 
   return (
-    <section className="reminder-loop" aria-label="Daily reminder loop">
-      <div className="reminder-track">
-        {items.map((item, index) => (
-          <article className="reminder-pill" key={`${item.title}-${index}`}>
-            <strong>{item.title}</strong>
-            <span>{item.detail}</span>
-          </article>
-        ))}
-      </div>
+    <section className="glance-strip" aria-label="Today at a glance">
+      {items.map((item) => (
+        <div className={`glance-item ${item.met ? "is-met" : ""}`} key={item.label}>
+          <span className="section-label">{item.label}</span>
+          <strong>{item.value}</strong>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function ReminderLoop() {
+  return (
+    <section className="reminder-rail" aria-label="Daily reminder loop">
+      {loopReminders.map((item) => (
+        <article className="reminder-pill" key={item.title}>
+          <strong>{item.title}</strong>
+          <span>{item.detail}</span>
+        </article>
+      ))}
     </section>
   );
 }
@@ -223,10 +302,12 @@ function CountdownCard({ exam }) {
   return (
     <article className="countdown-card" style={{ "--accent": exam.color }}>
       <div className="countdown-subject">{exam.subject}</div>
-      <div className="countdown-number">{days}</div>
-      <div className="muted-label">days left</div>
+      <div className="countdown-number">
+        {days}
+        <span className="muted-label">{days === 1 ? "day left" : "days left"}</span>
+      </div>
       <div className="countdown-date">
-        {formatDate(exam.date)} - {exam.time}
+        {formatDate(exam.date)} · {exam.slot}
       </div>
     </article>
   );
@@ -638,6 +719,7 @@ function getFloatingReminder(care, studyMinutes, todayExam) {
 
 function FloatingCoach({ care, studyMinutes, todayExam }) {
   const [, setTick] = React.useState(0);
+  const [isOpen, setIsOpen] = React.useState(() => sessionStorage.getItem(`${STORAGE_PREFIX}_coach_hidden`) !== "1");
 
   React.useEffect(() => {
     const interval = window.setInterval(() => setTick((tick) => tick + 1), 60000);
@@ -650,8 +732,25 @@ function FloatingCoach({ care, studyMinutes, todayExam }) {
     document.getElementById(reminder.targetId)?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
+  function toggle(next) {
+    setIsOpen(next);
+    sessionStorage.setItem(`${STORAGE_PREFIX}_coach_hidden`, next ? "0" : "1");
+  }
+
+  if (!isOpen) {
+    return (
+      <button className="coach-reopen" onClick={() => toggle(true)} title="Show the reminder">
+        <Sparkles size={16} />
+        <span>{reminder.title}</span>
+      </button>
+    );
+  }
+
   return (
     <aside className="floating-coach" aria-live="polite">
+      <button className="coach-close" onClick={() => toggle(false)} aria-label="Hide reminder" title="Hide reminder">
+        <X size={15} />
+      </button>
       <span className="coach-type">{reminder.type}</span>
       <strong>{reminder.title}</strong>
       <p>{reminder.message}</p>
@@ -747,8 +846,10 @@ function StudentApp() {
       }
     }
 
-    loadToday();
-  }, [client]);
+    loadToday().catch((networkError) => {
+      showToast(`Working offline: ${networkError.message}`);
+    });
+  }, [client, showToast]);
 
   function saveDraft() {
     localStorage.setItem(`${STORAGE_PREFIX}_journal_draft`, JSON.stringify(journal));
@@ -791,10 +892,20 @@ function StudentApp() {
       ...studyMinutes
     };
 
-    if (client) {
+    // Keep the day locally before touching the network so a failed sync never loses it.
+    localStorage.setItem(`${STORAGE_PREFIX}_journal_${todayKey()}`, JSON.stringify(payload));
+    setLogHistory((current) => [payload, ...current.filter((log) => log.date !== todayKey())]);
+    localStorage.removeItem(`${STORAGE_PREFIX}_journal_draft`);
+
+    if (!client) {
+      showToast("Day saved locally.");
+      return;
+    }
+
+    try {
       const { error } = await client.from("daily_logs").upsert(payload, { onConflict: "date" });
       if (error) {
-        showToast(`Could not save daily log: ${error.message}`);
+        showToast(`Saved locally. Sync failed: ${error.message}`);
         return;
       }
 
@@ -811,22 +922,22 @@ function StudentApp() {
           .upsert(checkpointPayload, { onConflict: "date,topic" });
 
         if (checkpointError) {
-          showToast(`Daily log saved, but checkpoints failed: ${checkpointError.message}`);
+          showToast(`Daily log synced, but checkpoints failed: ${checkpointError.message}`);
           return;
         }
       }
-    }
 
-    localStorage.setItem(`${STORAGE_PREFIX}_journal_${todayKey()}`, JSON.stringify(payload));
-    setLogHistory((current) => [payload, ...current.filter((log) => log.date !== todayKey())]);
-    localStorage.removeItem(`${STORAGE_PREFIX}_journal_draft`);
-    showToast(client ? "Day submitted and synced." : "Day saved locally.");
+      showToast("Day submitted and synced.");
+    } catch (networkError) {
+      // supabase-js throws (rather than returning { error }) when the request never reaches the server.
+      showToast(`Saved locally. Could not reach the server: ${networkError.message}`);
+    }
   }
 
   return (
     <React.StrictMode>
-      <AppShell>
-        <ReminderLoop />
+      <AppShell nextExam={nextExam}>
+        <GlanceStrip care={care} studyMinutes={studyMinutes} checkpoints={checkpoints} />
         <TodayPlan todayExam={todayExam} nextExam={nextExam} />
         <section className="countdown-grid">
           {EXAMS.map((exam) => (
@@ -842,6 +953,7 @@ function StudentApp() {
           <Checkpoints checkpoints={checkpoints} setCheckpoints={setCheckpoints} />
           <ProgressPanel studyMinutes={studyMinutes} logHistory={logHistory} />
         </div>
+        <ReminderLoop />
         <TipPanel />
         <Journal journal={journal} setJournal={setJournal} onSaveDraft={saveDraft} />
         <FloatingCoach care={care} studyMinutes={studyMinutes} todayExam={todayExam} />
